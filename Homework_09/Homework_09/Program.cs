@@ -29,7 +29,7 @@ namespace Homework_09
     class Program
     {
         private static TelegramBotClient client;
-        private static string Token { get; set; } = "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
+        private static string Token { get; set; } = "Paste_Your_Token_Here";
         private static WebClient WebClient;
         private static ReceivingState state = ReceivingState.WaitingMessage;
         private const string FileDir = "UploadFiles";
