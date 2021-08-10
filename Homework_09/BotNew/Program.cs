@@ -31,7 +31,7 @@ namespace BotNew
         private static TelegramBotClient Bot;
         private static WebClient WebClient;
         private static Root tempWeather;
-        private static string Token { get; set; } = "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
+        private static string Token { get; set; } = "Paste_Your_Token_Here";
         private const string FileDir = @"UploadFiles";
 
         public static async Task Main()
