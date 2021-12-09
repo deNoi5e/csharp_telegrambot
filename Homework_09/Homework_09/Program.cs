@@ -31,7 +31,6 @@ namespace Homework_09
     {
         private static TelegramBotClient client;
         private static string Token { get; set; } = "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
-        private static WebClient WebClient;
         private static ReceivingState state = ReceivingState.WaitingMessage;
         private const string FileDir = "UploadFiles";
 
@@ -220,7 +219,6 @@ namespace Homework_09
 
             const string weatherApiKey = "0ef64ffa4b4a21ed287172f79e03b1d4"; // токен для OpenWeatherMap
             var city = msg.Text;
-            //WebClient = new WebClient();
             HttpClient httpClient = new HttpClient();
 
             var currentUrl = $"http://api.openweathermap.org/data/2.5/weather?q={msg.Text}" +
