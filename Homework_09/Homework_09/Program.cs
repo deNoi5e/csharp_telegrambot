@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot;
@@ -29,7 +30,7 @@ namespace Homework_09
     class Program
     {
         private static TelegramBotClient client;
-        private static string Token { get; set; } = "Paste_Your_Token_Here";
+        private static string Token { get; set; } = "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
         private static WebClient WebClient;
         private static ReceivingState state = ReceivingState.WaitingMessage;
         private const string FileDir = "UploadFiles";
@@ -78,7 +79,7 @@ namespace Homework_09
                         {
                             await SendWeather(msg);
                         }
-                        catch (Exception er)
+                        catch (Exception)
                         {
                             state = ReceivingState.WaitingCommand;
                             throw;
@@ -219,15 +220,15 @@ namespace Homework_09
 
             const string weatherApiKey = "0ef64ffa4b4a21ed287172f79e03b1d4"; // токен для OpenWeatherMap
             var city = msg.Text;
-            WebClient = new WebClient();
+            //WebClient = new WebClient();
+            HttpClient httpClient = new HttpClient();
 
             var currentUrl = $"http://api.openweathermap.org/data/2.5/weather?q={msg.Text}" +
                              $"&mode=json&units=metric&APPID={weatherApiKey}";
 
             try
             {
-                var weatherContent = WebClient.DownloadString(currentUrl);
-
+                var weatherContent = await httpClient.GetStringAsync(currentUrl);
                 var tempWeather = JsonConvert.DeserializeObject<Root>(weatherContent, new JsonSerializerSettings
                 {
                     Formatting = Formatting.Indented
