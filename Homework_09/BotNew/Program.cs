@@ -35,7 +35,7 @@ namespace TeleSharp
         public static TelegramBotClient Bot;
         public static WebClient WebClient;
         public static Root TempWeather;
-        private static string Token { get; set; } //= "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
+        private static string Token { get; set; }
         private static string FileDir { get; set; } = @"UploadFiles";
 
         public static PasswordConnectionInfo ConnectionInfo =
