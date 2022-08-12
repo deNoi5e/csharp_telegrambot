@@ -1,11 +1,13 @@
-﻿using Newtonsoft.Json;
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BotNew;
+using Newtonsoft.Json;
+using Renci.SshNet;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Extensions.Polling;
@@ -13,55 +15,74 @@ using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
+using File = Telegram.Bot.Types.File;
 
-namespace BotNew
+namespace TeleSharp
 {
-    enum ReceivingState
+    internal enum ReceivingState
     {
         WaitingMessage,
         WaitingCity,
         WaitingCommand,
-        WaitingFileName
+        WaitingFileName,
+        WaitingExecution
     }
 
 
     public static class Program
     {
-        private static ReceivingState state = ReceivingState.WaitingMessage;
-        private static TelegramBotClient Bot;
-        private static WebClient WebClient;
-        private static Root tempWeather;
-        private static string Token { get; set; } = "Paste_Your_Token_Here";
-        private const string FileDir = @"UploadFiles";
+        private static ReceivingState _state = ReceivingState.WaitingMessage;
+        public static TelegramBotClient Bot;
+        public static WebClient WebClient;
+        public static Root TempWeather;
+        private static string Token { get; set; } //= "222351205:AAEMBWyl4SoZ6NITzyWbdCKKsMI8D-gp0a4";
+        private static string FileDir { get; set; } = @"UploadFiles";
 
-        public static async Task Main()
+        public static PasswordConnectionInfo ConnectionInfo =
+            new PasswordConnectionInfo("192.168.1.1", 22, "root", "LZw05p0j");
+
+        internal static SshClient SshClient = new SshClient(ConnectionInfo);
+
+        public static async Task Main(string[] args)
         {
+            if (args.Length == 0)
+            {
+                Console.WriteLine("Не задан Токен в качестве аргумента");
+                return;
+            }
+
+            Token = args[0];
             Bot = new TelegramBotClient(Token);
+            SshClient.Connect();
+            ConnectionInfo.Timeout = TimeSpan.FromSeconds(30);
 
             // Проверка наличия директории из константы FileDir, в случае отсутствия - директория будет создана.
             if (!Directory.Exists(FileDir)) Directory.CreateDirectory($"{FileDir}");
 
 
-            var me = await Bot.GetMeAsync();
+            User me = await Bot.GetMeAsync();
             Console.Title = me.Username;
 
-            var cts = new CancellationTokenSource();
+
+            CancellationTokenSource cts = new CancellationTokenSource();
 
             // StartReceiving does not block the caller thread. Receiving is done on the ThreadPool.
             Bot.StartReceiving(new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
                 cts.Token);
 
             Console.WriteLine($"Start listening for @{me.Username}");
-            Console.ReadLine();
+            //Console.ReadLine();
 
+            Console.CancelKeyPress += (s, e) => cts.Cancel();
+            await Task.Delay(-1, cts.Token).ContinueWith(t => { });
             // Send cancellation request to stop bot
-            cts.Cancel();
+            //cts.Cancel();
         }
 
         private static async Task HandleUpdateAsync(ITelegramBotClient botClient, Update update,
             CancellationToken cancellationToken)
         {
-            var handler = update.Type
+            Task handler = update.Type
                 switch
                 {
                     UpdateType.Message => BotOnMessageReceived(update.Message),
@@ -95,16 +116,22 @@ namespace BotNew
                 return;
 
 
-            switch (state)
+            switch (_state)
             {
                 case ReceivingState.WaitingCity:
                     await GetCity(message);
                     break;
+                case ReceivingState.WaitingExecution:
+
                 case ReceivingState.WaitingMessage:
                     var action = (message.Text.Split(' ').First()) switch
                     {
                         "/start" => StartMessage(message),
                         "/files" => SendListFiles(message),
+                        "/vpnon" => ConnectOpenVpn(message),
+                        "/rebootrouter" => RebootRouter(message),
+                        "/rebootorange" => RebootOrange(message),
+                        "/vpnoff" => DisconnectOpenVpn(message),
                         "/weather" => RequestWeather(message),
                         _ => Usage(message)
                     };
@@ -123,31 +150,25 @@ namespace BotNew
                     catch (Exception e)
                     {
                         Console.WriteLine(e);
-                        await Bot.SendTextMessageAsync(message.Chat.Id, 
+                        await Bot.SendTextMessageAsync(message.Chat.Id,
                             "Неправильно, идем назад");
                         throw;
                     }
                     finally
                     {
-                        state = ReceivingState.WaitingMessage;
-                        
+                        _state = ReceivingState.WaitingMessage;
                     }
-                    
-                    
+
+
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
-            
+
             static async Task<Message> StartMessage(Message message)
             {
-                state = ReceivingState.WaitingMessage;
+                _state = ReceivingState.WaitingMessage;
 
-                var startMessage =
-                    "Привет!\n" +
-                    "В данном боте реализовано домашнее задание курса \"C#-разработчик.\"\n" +
-                    "Для работы используй следующие команды:\n\n" +
-                    "/weather - для получения погоды;\n" +
-                    "/files - для использования файлообменника;\n" +
-                    "/start - для попадания в данное меню\n";
-                await Bot.SendTextMessageAsync(message.Chat.Id, startMessage);
+                await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {DateTime.Now}");
 
                 // Simulate longer running task
                 await Task.Delay(500);
@@ -158,7 +179,7 @@ namespace BotNew
 
             static async Task<Message> SendListFiles(Message message)
             {
-                state = ReceivingState.WaitingFileName;
+                _state = ReceivingState.WaitingFileName;
 
                 try
                 {
@@ -172,7 +193,7 @@ namespace BotNew
                         sb.Append($"{file}\n");
                     }
 
-                    var listFile = sb.ToString();
+                    string listFile = sb.ToString();
 
                     return await Bot.SendTextMessageAsync(message.Chat.Id,
                         listFile + "\n\nДля скачивания файла введи его имя, для отмены /cancel:\n",
@@ -198,17 +219,88 @@ namespace BotNew
             }
         }
 
+        private static async Task<Message> RebootRouter(Message message)
+        {
+            _state = ReceivingState.WaitingExecution;
+
+
+            if (SshClient.IsConnected)
+            {
+                SshClient.RunCommand("reboot");
+                Thread.Sleep(100);
+            }
+            else
+            {
+                return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                    "SSH connection NOTactive");
+            }
+
+
+            return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                text: "Роутер отправлен в перезагрузку.");
+        }
+        private static async Task<Message> RebootOrange(Message message)
+        {
+            _state = ReceivingState.WaitingExecution;
+
+            return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                text: "Команда нереализована");
+        }
+
+        private static async Task<Message> ConnectOpenVpn(Message message)
+        {
+            _state = ReceivingState.WaitingExecution;
+
+
+            if (SshClient.IsConnected)
+            {
+                SshClient.RunCommand("/etc/init.d/openvpn start");
+                Thread.Sleep(100);
+            }
+            else
+            {
+                return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                    "SSH connection NOTactive");
+            }
+
+
+            return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                text: "VPN включен");
+        }
+
+        private static async Task<Message> DisconnectOpenVpn(Message message)
+        {
+            _state = ReceivingState.WaitingExecution;
+
+
+            if (SshClient.IsConnected)
+            {
+                SshClient.RunCommand("/etc/init.d/openvpn stop");
+                Thread.Sleep(100);
+            }
+            else
+            {
+                return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                    "SSH connection NOTactive");
+            }
+
+
+            return await Bot.SendTextMessageAsync(chatId: message.Chat.Id,
+                text: "VPN отключен");
+        }
+
+
         private static async Task DownloadFile(Message message)
         {
-            var fileName = message.Text;
-            using FileStream fileStream =
+            string fileName = message.Text;
+            await using FileStream fileStream =
                 new($"{FileDir}/{message.Text}", FileMode.Open, FileAccess.Read, FileShare.Read);
 
             await Bot.SendDocumentAsync(message.Chat.Id,
                 document: new InputOnlineFile(fileStream, fileName),
                 caption: $"Отправлено",
                 cancellationToken: default);
-            state = ReceivingState.WaitingMessage;
+            _state = ReceivingState.WaitingMessage;
         }
 
         /// <summary>
@@ -218,9 +310,20 @@ namespace BotNew
         /// <returns></returns>
         private static async Task UploadFile(Message message)
         {
-            var file = await Bot.GetFileAsync(message.Document.FileId);
-            var fileName = message.Document.FileName;
-            FileStream fs = new FileStream($"{FileDir}\\{fileName}", FileMode.Create);
+            File file = await Bot.GetFileAsync(message.Document.FileId);
+            string fileName = message.Document.FileName;
+
+            if (message.Document.MimeType == "application/x-bittorrent")
+            {
+                FileDir = @"UploadFiles/torrents";
+                if (!Directory.Exists(FileDir))
+                {
+                    Directory.CreateDirectory(FileDir);
+                }
+            }
+
+
+            FileStream fs = new($"{FileDir}//{fileName}", FileMode.Create);
             await Bot.DownloadFileAsync(file.FilePath, fs);
             fs.Close();
             await fs.DisposeAsync();
@@ -235,16 +338,16 @@ namespace BotNew
         {
             try
             {
-                var city = message.Text;
+                string city = message.Text;
                 //await Task.Delay(1000);
-                var sendText = GetWeather(city);
-                var iconPng = "http://openweathermap.org/img/w/" + 
-                              $"{tempWeather.Weather[0].Icon}" + ".png";
+                string sendText = GetWeather(city);
+                string iconPng = "http://openweathermap.org/img/w/" +
+                                 $"{TempWeather.Weather[0].Icon}" + ".png";
                 //WebClient.DownloadFile(iconPng, $"{FileDir}\\icon.png");
                 //Bitmap b = new Bitmap()
-                
 
-                await Bot.SendPhotoAsync(message.Chat.Id, 
+
+                await Bot.SendPhotoAsync(message.Chat.Id,
                     $"{iconPng}",
                     caption: sendText);
                 //await Bot.SendTextMessageAsync(message.Chat.Id, sendText);
@@ -256,7 +359,7 @@ namespace BotNew
             }
             finally
             {
-                state = ReceivingState.WaitingMessage;
+                _state = ReceivingState.WaitingMessage;
             }
         }
 
@@ -267,7 +370,7 @@ namespace BotNew
         /// <returns></returns>
         private static async Task<Message> RequestWeather(Message message)
         {
-            state = ReceivingState.WaitingCity;
+            _state = ReceivingState.WaitingCity;
 
             return await Bot.SendTextMessageAsync(message.Chat.Id, "Введи название города!",
                 replyMarkup: new ForceReplyMarkup());
@@ -280,29 +383,36 @@ namespace BotNew
         /// <returns>Текстовое представление погоды</returns>
         private static string GetWeather(string city)
         {
+#pragma warning disable SYSLIB0014
             WebClient = new WebClient();
+#pragma warning restore SYSLIB0014
             const string weatherApiKey = "0ef64ffa4b4a21ed287172f79e03b1d4"; // токен для OpenWeatherMap
-            
-            var currentUrl = $"http://api.openweathermap.org/data/2.5/weather?q={city}" +
-                             $"&mode=json&units=metric&APPID={weatherApiKey}";
-            
-            var weatherContent = WebClient.DownloadString(currentUrl);
 
-            tempWeather = JsonConvert.DeserializeObject<Root>(weatherContent, new JsonSerializerSettings
+            string currentUrl = $"http://api.openweathermap.org/data/2.5/weather?q={city}" +
+                                $"&mode=json&units=metric&APPID={weatherApiKey}";
+
+            string weatherContent = WebClient.DownloadString(currentUrl);
+
+            TempWeather = JsonConvert.DeserializeObject<Root>(weatherContent, new JsonSerializerSettings
             {
                 Formatting = Formatting.Indented
             });
 
-      
-            var textWeather = $"Погода в городе: {tempWeather.Name}\n" +
-                              $@"{Convert.ToInt32(tempWeather.Main.Temp).ToString()}°C";
-            return textWeather;
+
+            if (TempWeather != null)
+            {
+                string textWeather = $"Погода в городе: {TempWeather.Name}\n" +
+                                     $@"{Convert.ToInt32(TempWeather.Main.Temp)}°C";
+                return textWeather;
+            }
+
+            return null;
         }
 
         private static Task HandleErrorAsync(ITelegramBotClient botClient, Exception exception,
             CancellationToken cancellationToken)
         {
-            var errorMessage = exception switch
+            string errorMessage = exception switch
             {
                 ApiRequestException apiRequestException =>
                     $"Telegram API Error:\n[{apiRequestException.ErrorCode}]\n{apiRequestException.Message}",
