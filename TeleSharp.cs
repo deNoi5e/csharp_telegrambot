@@ -1,13 +1,13 @@
-﻿using System;
+﻿using BotNew;
+using Newtonsoft.Json;
+using Renci.SshNet;
+using System;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using BotNew;
-using Newtonsoft.Json;
-using Renci.SshNet;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Extensions.Polling;
@@ -35,11 +35,11 @@ public static class TeleSharp
     public static HttpClient HttpClient;
     public static Root TempWeather;
     private static string Token { get; set; }
+    private static string SshLogin { get; set; }
+    private static string SshPassword { get; set; }
     private static string FileDir { get; set; } = @"UploadFiles";
+    private static SshClient SshClient { get; set; }
 
-    public static PasswordConnectionInfo ConnectionInfo = new("192.168.1.1", 22, "root", "LZw05p0j");
-
-    internal static SshClient SshClient = new(ConnectionInfo);
 
     /// <summary>
     /// Основной процесс
@@ -48,16 +48,25 @@ public static class TeleSharp
     /// <returns></returns>
     public static async Task Main(string[] args)
     {
-        if (args.Length == 0)
+        if (args.Length < 3)
         {
-            Console.WriteLine("Не задан Токен в качестве аргумента");
+            Console.WriteLine("Не задан параметры запуска");
             return;
         }
 
+
         Token = args[0];
+        SshLogin = args[1];
+        SshPassword = args[2];
+
         Bot = new TelegramBotClient(Token);
+        PasswordConnectionInfo connectionInfo = new("192.168.1.1", SshLogin, SshPassword);
+        SshClient = new SshClient(connectionInfo);
+        connectionInfo.Timeout = TimeSpan.FromSeconds(30);
+
+        
+
         SshClient.Connect();
-        ConnectionInfo.Timeout = TimeSpan.FromSeconds(30);
 
         // Проверка наличия директории из константы FileDir, в случае отсутствия - директория будет создана.
         if (!Directory.Exists(FileDir)) Directory.CreateDirectory($"{FileDir}");
@@ -335,18 +344,13 @@ public static class TeleSharp
         try
         {
             string city = message.Text;
-            //await Task.Delay(1000);
             string sendText = await GetWeather(city);
             string iconPng = "http://openweathermap.org/img/w/" +
                              $"{TempWeather.Weather[0].Icon}" + ".png";
-            //WebClient.DownloadFile(iconPng, $"{FileDir}\\icon.png");
-            //Bitmap b = new Bitmap()
-
 
             await Bot.SendPhotoAsync(message.Chat.Id,
                 $"{iconPng}",
                 sendText);
-            //await Bot.SendTextMessageAsync(message.Chat.Id, sendText);
         }
         catch (Exception e)
         {
