@@ -2,6 +2,7 @@
 using Newtonsoft.Json;
 using Renci.SshNet;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -150,6 +151,7 @@ public static class TeleSharp
                     "/vpnoff" => DisconnectOpenVpn(message),
                     "/weather" => RequestWeather(message),
                     "/ssh" => SshReconnect(message),
+                    "/df" => DiskFree(message),
                     _ => Usage(message)
                 };
                 Message sentMessage = await action;
@@ -229,6 +231,31 @@ public static class TeleSharp
                 usage,
                 replyMarkup: new ReplyKeyboardRemove());
         }
+    }
+
+    /// <summary>
+    /// Возврат данных занятого пространства на апельсинке
+    /// </summary>
+    /// <param name="message"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    private static async Task<Message> DiskFree(Message message)
+    {
+        string result = "";
+        Process process = new();
+        process.StartInfo.FileName = "/bin/bash";
+        process.StartInfo.Arguments = "-c \" " + "df -h" + " \"";
+        process.StartInfo.UseShellExecute = false;
+        process.StartInfo.RedirectStandardOutput = true;
+        process.Start();
+
+        result += process.StandardOutput.ReadToEnd();
+
+        process.WaitForExit();
+
+        return await Bot.SendTextMessageAsync(message.Chat.Id,
+            result);
+
     }
 
     /// <summary>
