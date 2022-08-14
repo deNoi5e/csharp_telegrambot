@@ -31,14 +31,15 @@ internal enum ReceivingState
 public static class TeleSharp
 {
     private static ReceivingState _state = ReceivingState.WaitingMessage;
-    public static TelegramBotClient Bot;
-    public static HttpClient HttpClient;
-    public static Root TempWeather;
+    private static TelegramBotClient Bot { get; set; }
+    private static HttpClient HttpClient { get; set; }
+    private static Root TempWeather { get; set; }
     private static string Token { get; set; }
     private static string SshLogin { get; set; }
     private static string SshPassword { get; set; }
     private static string FileDir { get; set; } = @"UploadFiles";
     private static SshClient SshClient { get; set; }
+    private static DateTime StartBotTime { get; } = DateTime.Now;
 
 
     /// <summary>
@@ -83,10 +84,13 @@ public static class TeleSharp
             cts.Token);
 
         Console.WriteLine($"Start listening for @{me.Username}");
-        //Console.ReadLine();
+        await Bot.SendTextMessageAsync(chatId: new ChatId(36327828), 
+            text: $"Бот запущен {StartBotTime}", 
+            cancellationToken: default);
+
 
         Console.CancelKeyPress += (s, e) => cts.Cancel();
-        await Task.Delay(-1, cts.Token).ContinueWith(t => { });
+        await Task.Delay(-1, cts.Token).ContinueWith(t => { }, cts.Token);
         // Send cancellation request to stop bot
         //cts.Cancel();
     }
@@ -145,6 +149,7 @@ public static class TeleSharp
                     "/rebootorange" => RebootOrange(message),
                     "/vpnoff" => DisconnectOpenVpn(message),
                     "/weather" => RequestWeather(message),
+                    "/ssh" => SshReconnect(message),
                     _ => Usage(message)
                 };
                 Message sentMessage = await action;
@@ -180,7 +185,7 @@ public static class TeleSharp
         {
             _state = ReceivingState.WaitingMessage;
 
-            await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {DateTime.Now}");
+            await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {StartBotTime}");
 
             // Simulate longer running task
             await Task.Delay(500);
@@ -224,6 +229,19 @@ public static class TeleSharp
                 usage,
                 replyMarkup: new ReplyKeyboardRemove());
         }
+    }
+
+    /// <summary>
+    /// Принудительная переподключение к SSH роутера
+    /// </summary>
+    /// <param name="message"></param>
+    /// <returns></returns>
+    private static async Task<Message> SshReconnect(Message message)
+    {
+        SshClient.Connect();
+        return await Bot.SendTextMessageAsync(message.Chat.Id, 
+            "SSH-клиент перезапущен", 
+            cancellationToken: default);
     }
 
     private static async Task<Message> RebootRouter(Message message)
@@ -323,7 +341,7 @@ public static class TeleSharp
 
         if (message.Document.MimeType == "application/x-bittorrent")
         {
-            FileDir = @"UploadFiles/torrents";
+            FileDir = @"/mnt/usb/torrents";
             if (!Directory.Exists(FileDir)) Directory.CreateDirectory(FileDir);
         }
 
