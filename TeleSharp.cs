@@ -17,6 +17,8 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 using File = Telegram.Bot.Types.File;
+using Serilog;
+using Serilog.Core;
 
 namespace TeleSharp;
 
@@ -42,6 +44,13 @@ public static class TeleSharp
     private static SshClient SshClient { get; set; }
     private static DateTime StartBotTime { get; } = DateTime.Now;
 
+    private static readonly LoggingLevelSwitch levelSwitch
+        = new(Serilog.Events.LogEventLevel.Information);
+    private static readonly Logger logger = new LoggerConfiguration()
+            .MinimumLevel.ControlledBy(levelSwitch)
+            .WriteTo.Console()
+            .WriteTo.File("log", rollingInterval: RollingInterval.Day)
+            .CreateLogger();
 
     /// <summary>
     /// Основной процесс
@@ -52,16 +61,17 @@ public static class TeleSharp
     {
         if (args.Length < 3)
         {
-            Console.WriteLine("Не задан параметры запуска");
+            logger.Fatal("Не задан параметры запуска");
             return;
         }
-
+        
 
         Token = args[0];
         SshLogin = args[1];
         SshPassword = args[2];
 
         Bot = new TelegramBotClient(Token);
+        
         PasswordConnectionInfo connectionInfo = new("192.168.1.1", SshLogin, SshPassword);
         SshClient = new SshClient(connectionInfo);
         connectionInfo.Timeout = TimeSpan.FromSeconds(30);
@@ -84,7 +94,7 @@ public static class TeleSharp
         Bot.StartReceiving(new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
             cts.Token);
 
-        Console.WriteLine($"Start listening for @{me.Username}");
+        logger.Information($"Start listening for @{me.Username}");
         await Bot.SendTextMessageAsync(chatId: new ChatId(36327828), 
             text: $"Бот запущен {StartBotTime}", 
             cancellationToken: default);
@@ -118,7 +128,7 @@ public static class TeleSharp
 
     private static async Task BotOnMessageReceived(Message message)
     {
-        Console.WriteLine($"Receive message type: {message.Type}");
+        logger.Information($"Receive message type: {message.Type}");
 
         // Receive Document
 
@@ -155,10 +165,10 @@ public static class TeleSharp
                     _ => Usage(message)
                 };
                 Message sentMessage = await action;
-                Console.WriteLine($"The message was sent with id: {sentMessage.MessageId}");
+                logger.Information($"The message was sent with id: {sentMessage.MessageId}");
                 break;
             case ReceivingState.WaitingCommand:
-                Console.WriteLine("Ожидаем команду");
+                logger.Information("Ожидаем команду");
                 break;
             case ReceivingState.WaitingFileName:
                 try
@@ -168,7 +178,7 @@ public static class TeleSharp
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e);
+                    logger.Error(e.ToString());
                     await Bot.SendTextMessageAsync(message.Chat.Id,
                         "Неправильно, идем назад");
                     throw;
@@ -187,13 +197,8 @@ public static class TeleSharp
         {
             _state = ReceivingState.WaitingMessage;
 
-            await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {StartBotTime}");
+            return await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {StartBotTime}");
 
-            // Simulate longer running task
-            await Task.Delay(500);
-
-            return await Bot.SendTextMessageAsync(message.Chat.Id,
-                "Нажми на команду или введи вручную");
         }
 
         static async Task<Message> SendListFiles(Message message)
@@ -202,7 +207,7 @@ public static class TeleSharp
 
             try
             {
-                Console.WriteLine("Файлы:");
+                logger.Information("Файлы:");
                 string[] files = Directory.GetFiles(FileDir);
 
                 StringBuilder sb = new();
@@ -218,7 +223,7 @@ public static class TeleSharp
             }
             catch (Exception e)
             {
-                Console.WriteLine(e);
+                logger.Error(e.ToString());
                 throw;
             }
         }
@@ -399,7 +404,7 @@ public static class TeleSharp
         }
         catch (Exception e)
         {
-            Console.WriteLine(e);
+            logger.Error(e.ToString());
             throw;
         }
         finally
@@ -460,7 +465,7 @@ public static class TeleSharp
             _ => exception.ToString()
         };
 
-        Console.WriteLine(errorMessage);
+        logger.Error(errorMessage);
         return Task.CompletedTask;
     }
 }
