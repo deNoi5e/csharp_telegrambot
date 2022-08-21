@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Telegram.Bot;
+using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 
-namespace Telegram.Bot.Extensions.Polling;
+namespace TeleSharp;
 
 /// <summary>
 /// A very simple <see cref="IUpdateHandler"/> implementation

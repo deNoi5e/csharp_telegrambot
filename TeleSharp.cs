@@ -11,7 +11,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
-using Telegram.Bot.Extensions.Polling;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
@@ -45,12 +44,13 @@ public static class TeleSharp
     private static DateTime StartBotTime { get; } = DateTime.Now;
 
     private static readonly LoggingLevelSwitch LevelSwitch
-        = new(Serilog.Events.LogEventLevel.Information);
+        = new();
+
     private static readonly Logger Logger = new LoggerConfiguration()
-            .MinimumLevel.ControlledBy(LevelSwitch)
-            .WriteTo.Console()
-            .WriteTo.File("log", rollingInterval: RollingInterval.Day)
-            .CreateLogger();
+        .MinimumLevel.ControlledBy(LevelSwitch)
+        .WriteTo.Console()
+        .WriteTo.File("log", rollingInterval: RollingInterval.Day)
+        .CreateLogger();
 
     /// <summary>
     /// Основной процесс
@@ -64,19 +64,18 @@ public static class TeleSharp
             Logger.Fatal("Не задан параметры запуска");
             return;
         }
-        
+
 
         Token = args[0];
         SshLogin = args[1];
         SshPassword = args[2];
 
         Bot = new TelegramBotClient(Token);
-        
+
         PasswordConnectionInfo connectionInfo = new("192.168.1.1", SshLogin, SshPassword);
         SshClient = new SshClient(connectionInfo);
         connectionInfo.Timeout = TimeSpan.FromSeconds(30);
 
-        
 
         SshClient.Connect();
 
@@ -85,7 +84,7 @@ public static class TeleSharp
 
 
         User me = await Bot.GetMeAsync();
-        Console.Title = me.Username;
+        Console.Title = me.Username!;
 
 
         CancellationTokenSource cts = new();
@@ -95,8 +94,8 @@ public static class TeleSharp
             cts.Token);
 
         Logger.Information($"Start listening for @{me.Username}");
-        await Bot.SendTextMessageAsync(chatId: new ChatId(36327828), 
-            text: $"Бот запущен {StartBotTime}", 
+        await Bot.SendTextMessageAsync(chatId: new ChatId(36327828),
+            text: $"Бот запущен {StartBotTime}",
             cancellationToken: default);
 
 
@@ -151,7 +150,7 @@ public static class TeleSharp
             case ReceivingState.WaitingExecution:
 
             case ReceivingState.WaitingMessage:
-                var action = message.Text.Split(' ').First() switch
+                var action = message.Text?.Split(' ').First() switch
                 {
                     "/start" => StartMessage(message),
                     "/files" => SendListFiles(message),
@@ -198,7 +197,6 @@ public static class TeleSharp
             _state = ReceivingState.WaitingMessage;
 
             return await Bot.SendTextMessageAsync(message.Chat.Id, $"Bot started on {StartBotTime}");
-
         }
 
         static async Task<Message> SendListFiles(Message message)
@@ -254,13 +252,12 @@ public static class TeleSharp
         process.StartInfo.RedirectStandardOutput = true;
         process.Start();
 
-        result += process.StandardOutput.ReadToEnd();
+        result += await process.StandardOutput.ReadToEndAsync();
 
-        process.WaitForExit();
+        await process.WaitForExitAsync();
 
         return await Bot.SendTextMessageAsync(message.Chat.Id,
             result);
-
     }
 
     /// <summary>
@@ -271,8 +268,8 @@ public static class TeleSharp
     private static async Task<Message> SshReconnect(Message message)
     {
         SshClient.Connect();
-        return await Bot.SendTextMessageAsync(message.Chat.Id, 
-            "SSH-клиент перезапущен", 
+        return await Bot.SendTextMessageAsync(message.Chat.Id,
+            "SSH-клиент перезапущен",
             cancellationToken: default);
     }
 
@@ -368,10 +365,10 @@ public static class TeleSharp
     /// <returns></returns>
     private static async Task UploadFile(Message message)
     {
-        File file = await Bot.GetFileAsync(message.Document.FileId);
-        string fileName = message.Document.FileName;
+        File file = await Bot.GetFileAsync(message.Document?.FileId!);
+        string fileName = message.Document?.FileName;
 
-        if (message.Document.MimeType == "application/x-bittorrent")
+        if (message.Document?.MimeType == "application/x-bittorrent")
         {
             FileDir = @"/mnt/usb/torrents";
             if (!Directory.Exists(FileDir)) Directory.CreateDirectory(FileDir);
@@ -379,7 +376,7 @@ public static class TeleSharp
 
 
         FileStream fs = new($"{FileDir}//{fileName}", FileMode.Create);
-        await Bot.DownloadFileAsync(file.FilePath, fs);
+        await Bot.DownloadFileAsync(file.FilePath!, fs);
         fs.Close();
         await fs.DisposeAsync();
         await Bot.SendTextMessageAsync(message.Chat.Id, "Файл сохранен.");
