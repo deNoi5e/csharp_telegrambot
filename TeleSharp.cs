@@ -44,10 +44,10 @@ public static class TeleSharp
     private static SshClient SshClient { get; set; }
     private static DateTime StartBotTime { get; } = DateTime.Now;
 
-    private static readonly LoggingLevelSwitch levelSwitch
+    private static readonly LoggingLevelSwitch LevelSwitch
         = new(Serilog.Events.LogEventLevel.Information);
-    private static readonly Logger logger = new LoggerConfiguration()
-            .MinimumLevel.ControlledBy(levelSwitch)
+    private static readonly Logger Logger = new LoggerConfiguration()
+            .MinimumLevel.ControlledBy(LevelSwitch)
             .WriteTo.Console()
             .WriteTo.File("log", rollingInterval: RollingInterval.Day)
             .CreateLogger();
@@ -61,7 +61,7 @@ public static class TeleSharp
     {
         if (args.Length < 3)
         {
-            logger.Fatal("Не задан параметры запуска");
+            Logger.Fatal("Не задан параметры запуска");
             return;
         }
         
@@ -94,7 +94,7 @@ public static class TeleSharp
         Bot.StartReceiving(new DefaultUpdateHandler(HandleUpdateAsync, HandleErrorAsync),
             cts.Token);
 
-        logger.Information($"Start listening for @{me.Username}");
+        Logger.Information($"Start listening for @{me.Username}");
         await Bot.SendTextMessageAsync(chatId: new ChatId(36327828), 
             text: $"Бот запущен {StartBotTime}", 
             cancellationToken: default);
@@ -128,7 +128,7 @@ public static class TeleSharp
 
     private static async Task BotOnMessageReceived(Message message)
     {
-        logger.Information($"Receive message type: {message.Type}");
+        Logger.Information($"Receive message type: {message.Type}");
 
         // Receive Document
 
@@ -165,10 +165,10 @@ public static class TeleSharp
                     _ => Usage(message)
                 };
                 Message sentMessage = await action;
-                logger.Information($"The message was sent with id: {sentMessage.MessageId}");
+                Logger.Information($"The message was sent with id: {sentMessage.MessageId}");
                 break;
             case ReceivingState.WaitingCommand:
-                logger.Information("Ожидаем команду");
+                Logger.Information("Ожидаем команду");
                 break;
             case ReceivingState.WaitingFileName:
                 try
@@ -178,7 +178,7 @@ public static class TeleSharp
                 }
                 catch (Exception e)
                 {
-                    logger.Error(e.ToString());
+                    Logger.Error(e.ToString());
                     await Bot.SendTextMessageAsync(message.Chat.Id,
                         "Неправильно, идем назад");
                     throw;
@@ -207,7 +207,7 @@ public static class TeleSharp
 
             try
             {
-                logger.Information("Файлы:");
+                Logger.Information("Файлы:");
                 string[] files = Directory.GetFiles(FileDir);
 
                 StringBuilder sb = new();
@@ -223,7 +223,7 @@ public static class TeleSharp
             }
             catch (Exception e)
             {
-                logger.Error(e.ToString());
+                Logger.Error(e.ToString());
                 throw;
             }
         }
@@ -404,7 +404,7 @@ public static class TeleSharp
         }
         catch (Exception e)
         {
-            logger.Error(e.ToString());
+            Logger.Error(e.ToString());
             throw;
         }
         finally
@@ -465,7 +465,7 @@ public static class TeleSharp
             _ => exception.ToString()
         };
 
-        logger.Error(errorMessage);
+        Logger.Error(errorMessage);
         return Task.CompletedTask;
     }
 }
