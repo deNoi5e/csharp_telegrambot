@@ -1,7 +1,4 @@
-﻿using BotNew;
-using Newtonsoft.Json;
-using Renci.SshNet;
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -9,6 +6,11 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using BotNew;
+using Newtonsoft.Json;
+using Renci.SshNet;
+using Serilog;
+using Serilog.Core;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Types;
@@ -16,8 +18,6 @@ using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 using File = Telegram.Bot.Types.File;
-using Serilog;
-using Serilog.Core;
 
 namespace TeleSharp;
 
@@ -33,15 +33,6 @@ internal enum ReceivingState
 public static class TeleSharp
 {
     private static ReceivingState _state = ReceivingState.WaitingMessage;
-    private static TelegramBotClient Bot { get; set; }
-    private static HttpClient HttpClient { get; set; }
-    private static Root TempWeather { get; set; }
-    private static string Token { get; set; }
-    private static string SshLogin { get; set; }
-    private static string SshPassword { get; set; }
-    private static string FileDir { get; set; } = @"UploadFiles";
-    private static SshClient SshClient { get; set; }
-    private static DateTime StartBotTime { get; } = DateTime.Now;
 
     private static readonly LoggingLevelSwitch LevelSwitch
         = new();
@@ -52,8 +43,18 @@ public static class TeleSharp
         .WriteTo.File("log", rollingInterval: RollingInterval.Day)
         .CreateLogger();
 
+    private static TelegramBotClient Bot { get; set; }
+    private static HttpClient HttpClient { get; set; }
+    private static Root TempWeather { get; set; }
+    private static string Token { get; set; }
+    private static string SshLogin { get; set; }
+    private static string SshPassword { get; set; }
+    private static string FileDir { get; set; } = @"UploadFiles";
+    private static SshClient SshClient { get; set; }
+    private static DateTime StartBotTime { get; } = DateTime.Now;
+
     /// <summary>
-    /// Основной процесс
+    ///     Основной процесс
     /// </summary>
     /// <param name="args">Telegram Token</param>
     /// <returns></returns>
@@ -94,8 +95,8 @@ public static class TeleSharp
             cts.Token);
 
         Logger.Information($"Start listening for @{me.Username}");
-        await Bot.SendTextMessageAsync(chatId: new ChatId(36327828),
-            text: $"Бот запущен {StartBotTime}",
+        await Bot.SendTextMessageAsync(new ChatId(36327828),
+            $"Бот запущен {StartBotTime}",
             cancellationToken: default);
 
 
@@ -237,7 +238,7 @@ public static class TeleSharp
     }
 
     /// <summary>
-    /// Возврат данных занятого пространства на апельсинке
+    ///     Возврат данных занятого пространства на апельсинке
     /// </summary>
     /// <param name="message"></param>
     /// <returns></returns>
@@ -261,13 +262,19 @@ public static class TeleSharp
     }
 
     /// <summary>
-    /// Принудительная переподключение к SSH роутера
+    ///     Принудительная переподключение к SSH роутера
     /// </summary>
     /// <param name="message"></param>
     /// <returns></returns>
     private static async Task<Message> SshReconnect(Message message)
     {
         SshClient.Connect();
+        Thread.Sleep(100);
+        if (!SshClient.IsConnected)
+            return await Bot.SendTextMessageAsync(message.Chat.Id,
+                "SSH-клиент не удалось запустить.",
+                cancellationToken: default);
+
         return await Bot.SendTextMessageAsync(message.Chat.Id,
             "SSH-клиент перезапущен",
             cancellationToken: default);
@@ -353,13 +360,13 @@ public static class TeleSharp
 
         await Bot.SendDocumentAsync(message.Chat.Id,
             new InputOnlineFile(fileStream, fileName),
-            caption: $"Отправлено",
+            caption: "Отправлено",
             cancellationToken: default);
         _state = ReceivingState.WaitingMessage;
     }
 
     /// <summary>
-    /// Сохранение файла типа document в папку с запущенным проектом
+    ///     Сохранение файла типа document в папку с запущенным проектом
     /// </summary>
     /// <param name="message"></param>
     /// <returns></returns>
@@ -383,7 +390,7 @@ public static class TeleSharp
     }
 
     /// <summary>
-    /// Получение "ожидаемого" City
+    ///     Получение "ожидаемого" City
     /// </summary>
     /// <param name="message"></param>
     private static async Task GetCity(Message message)
@@ -411,7 +418,7 @@ public static class TeleSharp
     }
 
     /// <summary>
-    /// Запрос City
+    ///     Запрос City
     /// </summary>
     /// <param name="message"></param>
     /// <returns></returns>
@@ -424,7 +431,7 @@ public static class TeleSharp
     }
 
     /// <summary>
-    /// Получение информации о погоде
+    ///     Получение информации о погоде
     /// </summary>
     /// <param name="city">Город</param>
     /// <returns>Текстовое представление погоды</returns>

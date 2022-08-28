@@ -22,5 +22,14 @@
         <None Remove="Serilog"/>
         <None Remove="Serilog.Sinks.File"/>
         <None Remove="Serilog.Sinks.Console"/>
+        <None Remove="Test\**"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Remove="Test\**"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Remove="Test\**"/>
     </ItemGroup>
 </Project>
